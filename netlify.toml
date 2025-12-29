@@ -1,0 +1,3 @@
+[build]
+  command = "echo 'Skipping backend build for Netlify - Static Site Only'"
+  publish = "public"
