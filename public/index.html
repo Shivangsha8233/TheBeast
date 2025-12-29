@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>THE BEAST // DASHBOARD</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --neon-green: #0f0;
+            --neon-red: #f00;
+            --neon-yellow: #ff0;
+            --bg: #050505;
+            --panel: #111;
+        }
+
+        body {
+            background: var(--bg);
+            color: var(--neon-green);
+            font-family: 'Courier New', monospace;
+            margin: 0;
+            padding: 20px;
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        h1 {
+            text-shadow: 0 0 10px var(--neon-green);
+            border-bottom: 2px solid var(--neon-green);
+            padding-bottom: 10px;
+        }
+
+        .panel {
+            background: var(--panel);
+            border: 1px solid #333;
+            padding: 20px;
+            box-shadow: 0 0 20px rgba(0, 255, 0, 0.1);
+        }
+
+        button {
+            background: transparent;
+            border: 1px solid var(--neon-green);
+            color: var(--neon-green);
+            padding: 10px 20px;
+            cursor: pointer;
+            font-family: inherit;
+            font-weight: bold;
+            margin-right: 10px;
+            transition: 0.2s;
+        }
+
+        button:hover {
+            background: var(--neon-green);
+            color: #000;
+            box-shadow: 0 0 15px var(--neon-green);
+        }
+
+        button.stop {
+            border-color: var(--neon-red);
+            color: var(--neon-red);
+        }
+
+        button.stop:hover {
+            background: var(--neon-red);
+        }
+
+        .glitch-active {
+            animation: glitch 0.1s infinite;
+            border-color: var(--neon-red) !important;
+            color: var(--neon-red) !important;
+        }
+
+        @keyframes glitch {
+            0% {
+                transform: translate(2px, 2px);
+            }
+
+            25% {
+                transform: translate(-2px, -2px);
+            }
+
+            50% {
+                transform: translate(-2px, 2px);
+            }
+
+            75% {
+                transform: translate(2px, -2px);
+            }
+
+            100% {
+                transform: translate(0, 0);
+            }
+        }
+
+        #bucket-viz {
+            width: 100%;
+            height: 30px;
+            background: #222;
+            margin-top: 20px;
+            position: relative;
+            border: 1px solid #444;
+        }
+
+        #bucket-fill {
+            height: 100%;
+            background: var(--neon-green);
+            width: 100%;
+            transition: width 0.2s;
+            box-shadow: 0 0 10px var(--neon-green);
+        }
+
+        #bucket-fill.warning {
+            background: var(--neon-red);
+            box-shadow: 0 0 10px var(--neon-red);
+        }
+
+        #queue-viz {
+            display: flex;
+            gap: 5px;
+            margin-top: 20px;
+            height: 30px;
+        }
+
+        .queue-slot {
+            flex: 1;
+            border: 1px solid #444;
+            background: #222;
+            transition: 0.2s;
+        }
+
+        .queue-slot.active {
+            background: var(--neon-yellow);
+            box-shadow: 0 0 10px var(--neon-yellow);
+        }
+
+        .stat {
+            font-size: 2em;
+            font-weight: bold;
+        }
+
+        .log {
+            height: 200px;
+            overflow-y: scroll;
+            font-size: 0.8em;
+            border-top: 1px solid #333;
+            margin-top: 20px;
+            padding-top: 10px;
+            color: #888;
+        }
+
+        .log div {
+            margin-bottom: 4px;
+        }
+
+        .log .access {
+            color: var(--neon-green);
+        }
+
+        .log .wait {
+            color: var(--neon-yellow);
+        }
+
+        .log .block {
+            color: var(--neon-red);
+        }
+    </style>
+</head>
+
+<body>
+    <h1>THE BEAST // RATE LIMITER NODE</h1>
+
+    <div class="panel" style="grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between;">
+        <div>
+            STATUS: <span id="status" style="color: grey">OFFLINE</span>
+        </div>
+        <div>
+            <button onclick="spam(20)">SPAM /wait (20)</button>
+            <button onclick="startLoad()">START LOAD (Classic)</button>
+            <button class="stop" onclick="stopLoad()">STOP</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="panel">
+            <h2>REAL-TIME METRICS</h2>
+            <canvas id="chart"></canvas>
+
+            <h3>WAITING BUCKET QUEUE</h3>
+            <div id="queue-viz">
+                <div class="queue-slot"></div>
+                <div class="queue-slot"></div>
+                <div class="queue-slot"></div>
+                <div class="queue-slot"></div>
+                <div class="queue-slot"></div>
+                <div class="queue-slot"></div>
+                <div class="queue-slot"></div>
+                <div class="queue-slot"></div>
+                <div class="queue-slot"></div>
+                <div class="queue-slot"></div>
+            </div>
+        </div>
+        <div class="panel">
+            <h2>STATS</h2>
+            <div>ACCEPTED: <span id="stat-ok" class="stat">0</span></div>
+            <div>QUEUED: <span id="stat-wait" class="stat" style="color: var(--neon-yellow)">0</span></div>
+            <div>BLOCKED: <span id="stat-block" class="stat" style="color: var(--neon-red)">0</span></div>
+            <div class="log" id="log"></div>
+        </div>
+    </div>
+
+    <script>
+        let loadInterval;
+        let queryQueueSize = 0;
+        let stats = { ok: 0, block: 0, wait: 0 };
+        const ctx = document.getElementById('chart').getContext('2d');
+        const chart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: Array(20).fill(''),
+                datasets: [{
+                    label: 'RPS (OK)', borderColor: '#0f0', data: Array(20).fill(0), tension: 0.4
+                }, {
+                    label: 'RPS (Wait)', borderColor: '#ff0', data: Array(20).fill(0), tension: 0.4
+                }, {
+                    label: 'RPS (Block)', borderColor: '#f00', data: Array(20).fill(0), tension: 0.4
+                }]
+            },
+            options: { animation: false, scales: { y: { beginAtZero: true, grid: { color: '#222' } }, x: { grid: { display: false } } } }
+        });
+
+        // Polling loop for status check
+        setInterval(async () => {
+            try {
+                // In real app, ping health endpoint
+                document.getElementById('status').innerText = "ONLINE";
+                document.getElementById('status').style.color = "#0f0";
+            } catch {
+                document.getElementById('status').innerText = "OFFLINE";
+                document.getElementById('status').style.color = "grey";
+            }
+        }, 2000);
+
+        // Chart Update Loop
+        let tOk = 0, tWait = 0, tBlock = 0;
+        setInterval(() => {
+            chart.data.datasets[0].data.shift(); chart.data.datasets[0].data.push(tOk);
+            chart.data.datasets[1].data.shift(); chart.data.datasets[1].data.push(tWait);
+            chart.data.datasets[2].data.shift(); chart.data.datasets[2].data.push(tBlock);
+            chart.update();
+            tOk = 0; tWait = 0; tBlock = 0;
+
+            // Visual decay of queue for demo purposes if we don't have real server push
+            if (queryQueueSize > 0) { queryQueueSize = Math.max(0, queryQueueSize - 1); updateQueueViz(); }
+        }, 1000);
+
+        async function req(endpoint) {
+            try {
+                const res = await fetch(endpoint || '/api/limit?user=dashboard');
+                const data = await res.json();
+
+                if (endpoint === '/api/wait?user=stress') {
+                    if (data.allowed) {
+                        if (data.duration > 50) {
+                            stats.wait++; tWait++;
+                            log(`ACCESS GRANTED (Waited ${data.duration}ms)`, 'wait');
+                            // We assume waiting means queue processed
+                            if (queryQueueSize > 0) queryQueueSize--;
+                        } else {
+                            stats.ok++; tOk++;
+                            log('ACCESS GRANTED (Immediate)', 'access');
+                        }
+                    } else {
+                        stats.block++; tBlock++;
+                        log('ACCESS DENIED (Queue Full)', 'block');
+                        document.body.classList.add('glitch-active');
+                        setTimeout(() => document.body.classList.remove('glitch-active'), 100);
+                    }
+                } else {
+                    // Classic limiter
+                    if (data.allowed) { stats.ok++; tOk++; }
+                    else { stats.block++; tBlock++; log('DENIED (Classic)', 'block'); }
+                }
+
+                updateStats();
+                updateQueueViz();
+            } catch (e) { console.error(e); }
+        }
+
+        function updateQueueViz() {
+            const slots = document.querySelectorAll('.queue-slot');
+            slots.forEach((s, i) => {
+                if (i < queryQueueSize) s.classList.add('active');
+                else s.classList.remove('active');
+            });
+        }
+
+        function updateStats() {
+            document.getElementById('stat-ok').innerText = stats.ok;
+            document.getElementById('stat-wait').innerText = stats.wait;
+            document.getElementById('stat-block').innerText = stats.block;
+        }
+
+        function log(msg, type) {
+            const div = document.createElement('div');
+            div.innerText = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            div.className = type;
+            const con = document.getElementById('log');
+            con.prepend(div);
+            if (con.children.length > 50) con.lastChild.remove();
+        }
+
+        function spam(n) {
+            // Burst logic for WaitingTokenBucket demo
+            for (let i = 0; i < n; i++) {
+                // If we spam faster than rate, they should queue
+                if (queryQueueSize < 10) queryQueueSize++;
+                updateQueueViz();
+                req('/api/wait?user=stress');
+            }
+        }
+
+        function startLoad() {
+            if (loadInterval) return;
+            loadInterval = setInterval(() => {
+                req('/api/limit?user=load');
+            }, 50);
+        }
+
+        function stopLoad() {
+            clearInterval(loadInterval);
+            loadInterval = null;
+        }
+    </script>
+</body>
+
+</html>
