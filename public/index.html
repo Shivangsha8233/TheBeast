@@ -216,6 +216,9 @@
     </div>
 
     <script>
+        // API base URL for production (Render backend)
+        const API_BASE = 'https://thebeast-zrzy.onrender.com';
+
         let loadInterval;
         let queryQueueSize = 0;
         let stats = { ok: 0, block: 0, wait: 0 };
@@ -239,7 +242,7 @@
         setInterval(async () => {
             try {
                 // Actual health check against the API
-                const res = await fetch('/api/limit?user=health_check');
+                const res = await fetch(`${API_BASE}/api/limit?user=health_check`);
                 if (res.ok || res.status === 429) {
                     document.getElementById('status').innerText = "ONLINE";
                     document.getElementById('status').style.color = "#0f0";
@@ -267,10 +270,10 @@
 
         async function req(endpoint) {
             try {
-                const res = await fetch(endpoint || '/api/limit?user=dashboard');
+                const res = await fetch(endpoint ? `${API_BASE}${endpoint}` : `${API_BASE}/api/limit?user=dashboard`);
                 const data = await res.json();
 
-                if (endpoint === '/api/wait?user=stress') {
+                if (endpoint && endpoint.includes('/api/wait')) {
                     if (data.allowed) {
                         if (data.duration > 50) {
                             stats.wait++; tWait++;
@@ -327,14 +330,14 @@
                 // If we spam faster than rate, they should queue
                 if (queryQueueSize < 10) queryQueueSize++;
                 updateQueueViz();
-                req('/api/wait?user=stress');
+                req('/api/wait?user=stress');  // API_BASE is prepended in req()
             }
         }
 
         function startLoad() {
             if (loadInterval) return;
             loadInterval = setInterval(() => {
-                req('/api/limit?user=load');
+                req('/api/limit?user=load');  // API_BASE is prepended in req()
             }, 50);
         }
 
