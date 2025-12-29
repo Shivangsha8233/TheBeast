@@ -7,7 +7,7 @@ import Redis from 'ioredis';
 import { RateLimiterFactory } from './core/RateLimiterFactory';
 
 const numCPUs = os.cpus().length;
-const PORT = 8080;
+const PORT = Number(process.env.PORT) || 8080;
 
 if (cluster.isPrimary) {
     console.log(`Master ${process.pid} is running`);
