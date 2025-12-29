@@ -23,15 +23,17 @@ if (cluster.isPrimary) {
 }
 
 async function startWorker() {
-    const redis = new Redis({
-        host: 'localhost',
-        port: 6379,
+    // Priority: REDIS_URL (Railway) -> Env Vars -> Localhost
+    const redisUrl = process.env.REDIS_URL;
+    const redisOptions = {
+        host: process.env.REDIS_HOST || 'localhost',
+        port: Number(process.env.REDIS_PORT) || 6379,
+        password: process.env.REDIS_PASSWORD || undefined,
         enableOfflineQueue: false,
-        retryStrategy: (times) => {
-            const delay = Math.min(times * 50, 2000);
-            return delay;
-        }
-    });
+        retryStrategy: (times: number) => Math.min(times * 50, 2000)
+    };
+
+    const redis = redisUrl ? new Redis(redisUrl) : new Redis(redisOptions);
 
     redis.on('error', (err) => {
         console.error('[Redis] Connection Error. Is Docker running?');
