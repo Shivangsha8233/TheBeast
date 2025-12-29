@@ -238,11 +238,16 @@
         // Polling loop for status check
         setInterval(async () => {
             try {
-                // In real app, ping health endpoint
-                document.getElementById('status').innerText = "ONLINE";
-                document.getElementById('status').style.color = "#0f0";
+                // Actual health check against the API
+                const res = await fetch('/api/limit?user=health_check');
+                if (res.ok || res.status === 429) {
+                    document.getElementById('status').innerText = "ONLINE";
+                    document.getElementById('status').style.color = "#0f0";
+                } else {
+                    throw new Error('API Error');
+                }
             } catch {
-                document.getElementById('status').innerText = "OFFLINE";
+                document.getElementById('status').innerText = "OFFLINE (API Unreachable)";
                 document.getElementById('status').style.color = "grey";
             }
         }, 2000);
